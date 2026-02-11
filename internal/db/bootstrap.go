@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"gorm.io/gorm"
@@ -23,6 +24,8 @@ var requiredTables = []string{
 
 // EnsureSchema checks core tables and bootstraps schema when missing.
 func EnsureSchema(ctx context.Context, orm *gorm.DB) error {
+	log.Printf("startup: verifying database schema tables count=%d", len(requiredTables))
+
 	missingTables := make([]string, 0)
 	for _, tableName := range requiredTables {
 		if !orm.Migrator().HasTable(tableName) {
@@ -31,20 +34,27 @@ func EnsureSchema(ctx context.Context, orm *gorm.DB) error {
 	}
 
 	if len(missingTables) > 0 {
+		log.Printf("startup: missing tables detected: %s", strings.Join(missingTables, ","))
+		log.Printf("startup: bootstrapping database schema")
 		if err := bootstrapSchema(ctx, orm); err != nil {
 			return fmt.Errorf("bootstrap schema for missing tables (%s): %w", strings.Join(missingTables, ","), err)
 		}
+		log.Printf("startup: schema bootstrap finished")
 
 		for _, tableName := range requiredTables {
 			if !orm.Migrator().HasTable(tableName) {
 				return fmt.Errorf("table %s still missing after bootstrap", tableName)
 			}
 		}
+	} else {
+		log.Printf("startup: all required tables already exist")
 	}
 
+	log.Printf("startup: ensuring schema constraints")
 	if err := ensureTransferAmountConstraint(ctx, orm); err != nil {
 		return fmt.Errorf("ensure score_transfers amount constraint: %w", err)
 	}
+	log.Printf("startup: schema constraints ready")
 
 	return nil
 }

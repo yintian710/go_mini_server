@@ -17,12 +17,15 @@ func NewDisconnectCleaner(svc *service.Service) *DisconnectCleaner {
 }
 
 func (cleaner *DisconnectCleaner) Start(ctx context.Context) {
+	log.Printf("disconnect cleaner started: interval=%s", time.Minute)
+
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Printf("disconnect cleaner stopped")
 			return
 		case <-ticker.C:
 			if err := cleaner.svc.CleanupDisconnected(ctx); err != nil {
