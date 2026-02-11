@@ -51,28 +51,121 @@ func (service *Service) WechatLogin(ctx context.Context, input WechatLoginInput)
 		return LoginResult{}, NewBadRequest("WECHAT_LOGIN_FAILED", "微信登录失败")
 	}
 
-	var user User
 	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var model userModel
 		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("wx_openid = ?", openid).Take(&model).Error
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
 
-			now := time.Now()
-			model = userModel{
-				WXOpenID:  openid,
-				Nickname:  defaultNickname(openid),
-				AvatarURL: "",
-				Role:      RoleNormal,
-				ActiveAt:  &now,
-				CreatedAt: now,
-				UpdatedAt: now,
+		now := time.Now()
+		model = userModel{
+			WXOpenID:  openid,
+			Nickname:  defaultNickname(openid),
+			AvatarURL: "",
+			Role:      RoleNormal,
+			ActiveAt:  &now,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := tx.Create(&model).Error; err != nil {
+			if isUniqueViolation(err) {
+				return nil
 			}
-			if err := tx.Create(&model).Error; err != nil {
-				return err
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return LoginResult{}, mapError(err)
+	}
+
+	return service.loginByIdentity(ctx, openid)
+}
+
+func (service *Service) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
+	identity, _, err := service.parseAccountInput(input.Account, "")
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	var model userModel
+	if err := service.orm.WithContext(ctx).Where("wx_openid = ?", identity).Take(&model).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return LoginResult{}, NewNotFound("ACCOUNT_NOT_FOUND", "账号不存在，请先注册")
+		}
+		return LoginResult{}, err
+	}
+
+	return service.loginByIdentity(ctx, identity)
+}
+
+func (service *Service) Register(ctx context.Context, input RegisterInput) (LoginResult, error) {
+	identity, nickname, err := service.parseAccountInput(input.Account, input.Nickname)
+	if err != nil {
+		return LoginResult{}, err
+	}
+
+	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		model := userModel{
+			WXOpenID:  identity,
+			Nickname:  nickname,
+			AvatarURL: "",
+			Role:      RoleNormal,
+			ActiveAt:  &now,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		return tx.Create(&model).Error
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			return LoginResult{}, NewConflict("ACCOUNT_EXISTS", "账号已存在")
+		}
+		return LoginResult{}, mapError(err)
+	}
+
+	return service.loginByIdentity(ctx, identity)
+}
+
+func (service *Service) parseAccountInput(accountRaw, nicknameRaw string) (string, string, error) {
+	account := strings.TrimSpace(accountRaw)
+	if account == "" {
+		return "", "", NewBadRequest("INVALID_ACCOUNT", "account 不能为空")
+	}
+	if len([]rune(account)) > 64 {
+		return "", "", NewBadRequest("INVALID_ACCOUNT", "account 最多 64 个字符")
+	}
+
+	nickname := strings.TrimSpace(nicknameRaw)
+	if nickname != "" && len([]rune(nickname)) > 32 {
+		return "", "", NewBadRequest("INVALID_NICKNAME", "昵称最多 32 个字符")
+	}
+
+	identity := "acct_" + strings.ToLower(account)
+	if nickname == "" {
+		nickname = defaultNickname(identity)
+	}
+
+	return identity, nickname, nil
+}
+
+func (service *Service) loginByIdentity(ctx context.Context, identity string) (LoginResult, error) {
+
+	var user User
+	err := service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var model userModel
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("wx_openid = ?", identity).Take(&model).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return NewNotFound("ACCOUNT_NOT_FOUND", "账号不存在，请先注册")
 			}
+			return err
 		}
 
 		now := time.Now()

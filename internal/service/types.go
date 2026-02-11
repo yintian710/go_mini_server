@@ -135,3 +135,12 @@ type RedeemCodeInput struct {
 type WechatLoginInput struct {
 	Code string `json:"code"`
 }
+
+type RegisterInput struct {
+	Account  string `json:"account"`
+	Nickname string `json:"nickname"`
+}
+
+type LoginInput struct {
+	Account string `json:"account"`
+}

@@ -158,6 +158,40 @@
 
 ### 3.2 认证与用户
 
+#### POST `/api/v1/auth/register`（免鉴权）
+
+请求：
+
+```json
+{
+  "account": "user_1001",
+  "nickname": "玩家1001"
+}
+```
+
+响应：`LoginResult`
+
+说明：
+- `account` 不能为空，最多 64 字符
+- `nickname` 可选，最多 32 字符；不传时服务端自动生成昵称
+- 账号已存在时返回冲突错误
+
+#### POST `/api/v1/auth/login`（免鉴权）
+
+请求：
+
+```json
+{
+  "account": "user_1001"
+}
+```
+
+响应：`LoginResult`
+
+说明：
+- `account` 不能为空，最多 64 字符
+- 仅允许已注册账号登录
+
 #### POST `/api/v1/auth/wechat-login`（免鉴权）
 
 请求：

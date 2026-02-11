@@ -5,6 +5,7 @@
 ## 已实现能力
 
 - 微信登录（开发环境使用 mock openid）+ JWT 鉴权
+- 账号登录（非微信）+ JWT 鉴权
 - 用户资料读写
 - 激活码创建（super_admin）与兑换
 - 房间创建/加入/详情/退出/踢人/心跳/房间昵称/聊天开关
@@ -53,6 +54,8 @@ go run ./cmd/api
 ## 主要 API 前缀
 
 - `POST /api/v1/auth/wechat-login`
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
 - `GET/PATCH /api/v1/me`
 - `POST /api/v1/activation/redeem`
 - `POST /api/v1/activation/codes`

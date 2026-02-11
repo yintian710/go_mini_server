@@ -35,6 +35,8 @@ func (api *API) RegisterRoutes(router *gin.Engine) {
 	v1 := router.Group("/api/v1")
 	{
 		authGroup := v1.Group("/auth")
+		authGroup.POST("/register", api.register)
+		authGroup.POST("/login", api.login)
 		authGroup.POST("/wechat-login", api.wechatLogin)
 
 		protected := v1.Group("")
@@ -98,6 +100,38 @@ func (api *API) wechatLogin(c *gin.Context) {
 	}
 
 	result, err := api.svc.WechatLogin(c.Request.Context(), input)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (api *API) login(c *gin.Context) {
+	var input service.LoginInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		writeErr(c, service.NewBadRequest("INVALID_REQUEST", "请求参数错误"))
+		return
+	}
+
+	result, err := api.svc.Login(c.Request.Context(), input)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func (api *API) register(c *gin.Context) {
+	var input service.RegisterInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		writeErr(c, service.NewBadRequest("INVALID_REQUEST", "请求参数错误"))
+		return
+	}
+
+	result, err := api.svc.Register(c.Request.Context(), input)
 	if err != nil {
 		writeErr(c, err)
 		return
