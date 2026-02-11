@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -15,6 +17,8 @@ type Config struct {
 	WechatAppID      string
 	WechatAppSecret  string
 	DisconnectWindow time.Duration
+	AvatarUploadDir  string
+	AvatarPublicBase string
 }
 
 func Load() (Config, error) {
@@ -34,6 +38,11 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")
 	}
 
+	avatarPublicBase, err := normalizeAvatarPublicBase(os.Getenv("AVATAR_PUBLIC_BASE_URL"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		AppAddr:          getEnv("APP_ADDR", ":8080"),
 		DatabaseURL:      databaseURL,
@@ -42,6 +51,8 @@ func Load() (Config, error) {
 		WechatAppID:      os.Getenv("WECHAT_APP_ID"),
 		WechatAppSecret:  os.Getenv("WECHAT_APP_SECRET"),
 		DisconnectWindow: time.Duration(disconnectMinutes) * time.Minute,
+		AvatarUploadDir:  getEnv("AVATAR_UPLOAD_DIR", "build/uploads"),
+		AvatarPublicBase: avatarPublicBase,
 	}, nil
 }
 
@@ -59,4 +70,21 @@ func getInt(key string, fallback int) (int, error) {
 		return fallback, nil
 	}
 	return strconv.Atoi(v)
+}
+
+func normalizeAvatarPublicBase(raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return "", nil
+	}
+
+	u, err := url.Parse(v)
+	if err != nil {
+		return "", fmt.Errorf("invalid AVATAR_PUBLIC_BASE_URL: %w", err)
+	}
+	if !u.IsAbs() || strings.ToLower(u.Scheme) != "https" || strings.TrimSpace(u.Host) == "" {
+		return "", fmt.Errorf("invalid AVATAR_PUBLIC_BASE_URL: must be absolute https url")
+	}
+
+	return strings.TrimRight(v, "/"), nil
 }

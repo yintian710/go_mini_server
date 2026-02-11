@@ -1,10 +1,16 @@
 package handler
 
 import (
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"go_mini_server/internal/auth"
 	"go_mini_server/internal/service"
@@ -15,14 +21,26 @@ import (
 
 const contextUserID = "userID"
 
-type API struct {
-	svc        *service.Service
-	jwtManager *auth.JWTManager
-	wsHandler  *ws.Handler
+const (
+	maxAvatarUploadBytes = 5 << 20
+)
+
+var allowedAvatarMime = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/webp": ".webp",
 }
 
-func NewAPI(svc *service.Service, jwtManager *auth.JWTManager, wsHandler *ws.Handler) *API {
-	return &API{svc: svc, jwtManager: jwtManager, wsHandler: wsHandler}
+type API struct {
+	svc              *service.Service
+	jwtManager       *auth.JWTManager
+	wsHandler        *ws.Handler
+	avatarUploadDir  string
+	avatarPublicBase string
+}
+
+func NewAPI(svc *service.Service, jwtManager *auth.JWTManager, wsHandler *ws.Handler, avatarUploadDir, avatarPublicBase string) *API {
+	return &API{svc: svc, jwtManager: jwtManager, wsHandler: wsHandler, avatarUploadDir: avatarUploadDir, avatarPublicBase: strings.TrimRight(strings.TrimSpace(avatarPublicBase), "/")}
 }
 
 func (api *API) RegisterRoutes(router *gin.Engine) {
@@ -44,6 +62,7 @@ func (api *API) RegisterRoutes(router *gin.Engine) {
 		{
 			protected.GET("/me", api.getMe)
 			protected.PATCH("/me", api.updateMe)
+			protected.POST("/uploads/avatar", api.uploadAvatar)
 
 			protected.POST("/activation/redeem", api.redeemCode)
 			protected.POST("/activation/codes", api.createActivationCode)
@@ -162,6 +181,106 @@ func (api *API) updateMe(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, user)
+}
+
+func (api *API) uploadAvatar(c *gin.Context) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		writeErr(c, service.NewBadRequest("INVALID_FILE", "缺少上传文件 file"))
+		return
+	}
+
+	if fileHeader.Size <= 0 {
+		writeErr(c, service.NewBadRequest("INVALID_FILE", "上传文件不能为空"))
+		return
+	}
+	if fileHeader.Size > maxAvatarUploadBytes {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "FILE_TOO_LARGE", "message": "文件过大，最大 5MB"})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+	defer file.Close()
+
+	head := make([]byte, 512)
+	readN, readErr := io.ReadFull(file, head)
+	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
+		writeErr(c, readErr)
+		return
+	}
+	head = head[:readN]
+	fileMime := strings.ToLower(strings.TrimSpace(http.DetectContentType(head)))
+	ext, ok := allowedAvatarMime[fileMime]
+	if !ok {
+		c.JSON(http.StatusUnsupportedMediaType, gin.H{"code": "UNSUPPORTED_FILE_TYPE", "message": "仅支持 jpg/png/webp"})
+		return
+	}
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	userID := mustUserID(c)
+	now := time.Now().UTC()
+	key := fmt.Sprintf("avatars/%d/%s%s", userID, now.Format("20060102T150405.000000000Z"), ext)
+	fullPath := filepath.Join(api.avatarUploadDir, filepath.FromSlash(key))
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	dst, err := os.Create(fullPath)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+
+	written, copyErr := io.Copy(dst, io.LimitReader(file, maxAvatarUploadBytes+1))
+	closeErr := dst.Close()
+	if copyErr != nil {
+		_ = os.Remove(fullPath)
+		writeErr(c, copyErr)
+		return
+	}
+	if closeErr != nil {
+		_ = os.Remove(fullPath)
+		writeErr(c, closeErr)
+		return
+	}
+	if written > maxAvatarUploadBytes {
+		_ = os.Remove(fullPath)
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"code": "FILE_TOO_LARGE", "message": "文件过大，最大 5MB"})
+		return
+	}
+
+	urlValue := api.buildAvatarPublicURL(c, key)
+	c.JSON(http.StatusOK, gin.H{
+		"url":  urlValue,
+		"key":  key,
+		"size": written,
+		"mime": fileMime,
+	})
+}
+
+func (api *API) buildAvatarPublicURL(c *gin.Context, key string) string {
+	encodedPath := "uploads/" + strings.TrimLeft(url.PathEscape(filepath.ToSlash(key)), "/")
+	encodedPath = strings.ReplaceAll(encodedPath, "%2F", "/")
+
+	if api.avatarPublicBase != "" {
+		return api.avatarPublicBase + "/" + encodedPath
+	}
+
+	host := strings.TrimSpace(c.Request.Host)
+	if host == "" {
+		host = "localhost:8080"
+	}
+
+	return "https://" + host + "/" + encodedPath
 }
 
 func (api *API) redeemCode(c *gin.Context) {

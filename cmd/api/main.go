@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -58,13 +59,18 @@ func main() {
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.TokenTTL)
 	wechatClient := auth.NewWechatClient(cfg.WechatAppID, cfg.WechatAppSecret)
 	wsHub := ws.NewHub()
+	avatarUploadDir := filepath.Clean(cfg.AvatarUploadDir)
+	if err := os.MkdirAll(avatarUploadDir, 0o755); err != nil {
+		log.Fatalf("create avatar upload dir failed: %v", err)
+	}
 
 	svc := service.New(gormDB, jwtManager, wechatClient, wsHub, cfg.DisconnectWindow)
 	wsHandler := ws.NewHandler(wsHub, jwtManager, svc)
-	api := handler.NewAPI(svc, jwtManager, wsHandler)
+	api := handler.NewAPI(svc, jwtManager, wsHandler, avatarUploadDir, cfg.AvatarPublicBase)
 
 	router := gin.Default()
 	router.Use(handler.AllowLocalhostCORS())
+	router.Static("/uploads", avatarUploadDir)
 	api.RegisterRoutes(router)
 	log.Printf("startup: http routes registered")
 

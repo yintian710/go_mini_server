@@ -37,6 +37,8 @@
 - `DISCONNECT_TIMEOUT_MINUTES`：默认 `5`
 - `WECHAT_APP_ID`：可选
 - `WECHAT_APP_SECRET`：可选
+- `AVATAR_UPLOAD_DIR`：可选，默认 `build/uploads`（头像存储目录）
+- `AVATAR_PUBLIC_BASE_URL`：可选，建议配置为 HTTPS 前缀（如 `https://api.example.com`）
 
 > 未配置微信参数时，`/auth/wechat-login` 会根据 code 生成 mock openid，便于本地联调。
 
@@ -57,6 +59,7 @@ go run ./cmd/api
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `GET/PATCH /api/v1/me`
+- `POST /api/v1/uploads/avatar`
 - `POST /api/v1/activation/redeem`
 - `POST /api/v1/activation/codes`
 - `POST /api/v1/rooms`

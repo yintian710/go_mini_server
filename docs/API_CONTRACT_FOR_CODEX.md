@@ -226,6 +226,28 @@
 校验：
 - `nickname` 必填
 - `nickname` 最多 32 字符
+- 前端应同时传 `nickname + avatarUrl`（匹配当前后端约束）
+
+#### POST `/api/v1/uploads/avatar`
+
+请求：`multipart/form-data`，字段名：`file`
+
+响应示例：
+
+```json
+{
+  "url": "https://api.example.com/uploads/avatars/100/20260211T123456.123456789Z.jpg",
+  "key": "avatars/100/20260211T123456.123456789Z.jpg",
+  "size": 182044,
+  "mime": "image/jpeg"
+}
+```
+
+说明：
+- 需要鉴权
+- 仅支持 `jpg/png/webp`
+- 文件最大 `5MB`
+- `url` 为长期可访问 HTTPS 链接（避免微信临时链接失效）
 
 ---
 

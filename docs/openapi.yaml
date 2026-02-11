@@ -126,6 +126,52 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/v1/uploads/avatar:
+    post:
+      tags: [User]
+      summary: 上传用户头像
+      description: 上传头像图片并返回可公开访问的 HTTPS URL。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvatarUploadResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: 文件过大
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: 不支持的文件类型
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 上传失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     patch:
       tags: [User]
       summary: 更新当前用户资料
@@ -709,6 +755,25 @@ components:
           type: string
         user:
           $ref: '#/components/schemas/User'
+
+    AvatarUploadResult:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: 公网可访问 HTTPS 地址
+        key:
+          type: string
+          description: 存储键（可选）
+        size:
+          type: integer
+          format: int64
+          description: 文件字节数（可选）
+        mime:
+          type: string
+          description: MIME 类型（可选）
 
     Room:
       type: object
