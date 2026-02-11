@@ -1,0 +1,955 @@
+openapi: 3.0.3
+info:
+  title: go_mini_server API
+  version: 1.0.0
+  description: |
+    打牌记分系统后端接口文档（基于当前代码实现整理）。
+
+    - HTTP API 前缀：`/api/v1`
+    - WebSocket：`/ws/rooms/{roomNo}`
+    - 错误统一格式：`{ code, message }`
+
+servers:
+  - url: http://localhost:8080
+    description: Local default server
+
+tags:
+  - name: System
+  - name: Auth
+  - name: User
+  - name: Activation
+  - name: Room
+  - name: Transfer
+  - name: Message
+  - name: Record
+  - name: WebSocket
+
+security:
+  - bearerAuth: []
+
+paths:
+  /healthz:
+    get:
+      tags: [System]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthzResponse'
+
+  /api/v1/auth/wechat-login:
+    post:
+      tags: [Auth]
+      summary: 微信登录
+      description: 未配置微信参数时，服务端会使用 mock openid 逻辑。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WechatLoginInput'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/me:
+    get:
+      tags: [User]
+      summary: 获取当前用户信息
+      responses:
+        '200':
+          description: 用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [User]
+      summary: 更新当前用户资料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMeInput'
+      responses:
+        '200':
+          description: 更新后的用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/activation/redeem:
+    post:
+      tags: [Activation]
+      summary: 兑换激活码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemCodeInput'
+      responses:
+        '200':
+          description: 兑换成功，返回更新后的用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/activation/codes:
+    post:
+      tags: [Activation]
+      summary: 创建激活码（仅 super_admin）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateActivationCodeInput'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateActivationCodeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/rooms:
+    post:
+      tags: [Room]
+      summary: 创建房间
+      description: 请求体可为空；`password` 为空表示无密码房间。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomInput'
+      responses:
+        '200':
+          description: 房间详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/rooms/{roomNo}:
+    get:
+      tags: [Room]
+      summary: 获取房间详情
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      responses:
+        '200':
+          description: 房间详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/rooms/{roomNo}/join:
+    post:
+      tags: [Room]
+      summary: 加入房间
+      description: 请求体可为空。
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinRoomInput'
+      responses:
+        '200':
+          description: 房间详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/rooms/{roomNo}/leave:
+    post:
+      tags: [Room]
+      summary: 主动离开房间
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/rooms/{roomNo}/chat-toggle:
+    post:
+      tags: [Room]
+      summary: 切换房间聊天开关（仅房主）
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatToggleInput'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/rooms/{roomNo}/kick:
+    post:
+      tags: [Room]
+      summary: 踢出房间成员（仅房主）
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KickInput'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/rooms/{roomNo}/nickname:
+    post:
+      tags: [Room]
+      summary: 修改当前用户在房间内昵称
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomNicknameInput'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/rooms/{roomNo}/heartbeat:
+    post:
+      tags: [Room]
+      summary: 心跳上报
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/rooms/{roomNo}/transfers:
+    post:
+      tags: [Transfer]
+      summary: 创建转账
+      description: amount 为负时，服务端会自动反转转账方向并取绝对值。
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferInput'
+      responses:
+        '200':
+          description: 转账记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/rooms/{roomNo}/transfers/{id}/action:
+    post:
+      tags: [Transfer]
+      summary: 转账动作（撤回/拒绝）
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+        - $ref: '#/components/parameters/TransferID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferActionInput'
+      responses:
+        '200':
+          description: 更新后的转账记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/rooms/{roomNo}/messages:
+    post:
+      tags: [Message]
+      summary: 发送聊天消息
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageInput'
+      responses:
+        '200':
+          description: 消息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags: [Message]
+      summary: 查询房间消息
+      description: 按 id 倒序返回，最多 50 条；传 cursor 时查询 id < cursor。
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: 消息列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/records:
+    get:
+      tags: [Record]
+      summary: 查询当前用户战绩列表
+      responses:
+        '200':
+          description: 战绩列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/records/{id}:
+    get:
+      tags: [Record]
+      summary: 查询战绩详情
+      parameters:
+        - $ref: '#/components/parameters/RecordID'
+      responses:
+        '200':
+          description: 战绩详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /ws/rooms/{roomNo}:
+    get:
+      tags: [WebSocket]
+      summary: 房间 WebSocket 连接
+      description: |
+        WebSocket endpoint（HTTP Upgrade）。
+
+        鉴权支持两种方式：
+        - Header: `Authorization: Bearer <token>`
+        - Query: `token=<token>`
+
+        服务端推送统一结构：
+        `{ "event": "<name>", "payload": <object> }`
+      parameters:
+        - $ref: '#/components/parameters/RoomNo'
+        - in: query
+          name: token
+          required: false
+          schema:
+            type: string
+          description: 可选。未传时可用 Authorization header。
+      responses:
+        '101':
+          description: Switching Protocols
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    RoomNo:
+      in: path
+      name: roomNo
+      required: true
+      schema:
+        type: string
+        pattern: "^[0-9]{4,6}$"
+        minLength: 4
+        maxLength: 6
+      description: 房间号，4~6 位纯数字字符串。
+      example: "102345"
+    TransferID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 1001
+    RecordID:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+      example: 10
+    Cursor:
+      in: query
+      name: cursor
+      required: false
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+      description: 用于加载历史消息，查询条件 id < cursor。
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    HealthzResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: INVALID_REQUEST
+        message:
+          type: string
+          example: 请求参数错误
+
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          example: true
+
+    User:
+      type: object
+      required: [id, nickname, avatarUrl, role, activeAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        nickname:
+          type: string
+        avatarUrl:
+          type: string
+        role:
+          type: string
+          enum: [normal, member, admin, super_admin]
+        activeAt:
+          type: string
+          format: date-time
+
+    LoginResult:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    Room:
+      type: object
+      required: [id, roomNo, ownerUserId, chatEnabled, status]
+      properties:
+        id:
+          type: integer
+          format: int64
+        roomNo:
+          type: string
+          pattern: "^[0-9]{4,6}$"
+          minLength: 4
+          maxLength: 6
+        ownerUserId:
+          type: integer
+          format: int64
+        chatEnabled:
+          type: boolean
+        status:
+          type: string
+          enum: [active, settled]
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    RoomMember:
+      type: object
+      required: [userId, roomNickname, score, joinSeq, isOnline, joinedAt, lastSeenAt]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        roomNickname:
+          type: string
+        score:
+          type: integer
+          format: int64
+        joinSeq:
+          type: integer
+          format: int64
+        isOnline:
+          type: boolean
+        joinedAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+
+    RoomDetail:
+      type: object
+      required: [room, members]
+      properties:
+        room:
+          $ref: '#/components/schemas/Room'
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoomMember'
+
+    Transfer:
+      type: object
+      required: [id, fromUserId, toUserId, amount, status, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        fromUserId:
+          type: integer
+          format: int64
+        toUserId:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [pending, rolled_back, rejected]
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Message:
+      type: object
+      required: [id, roomId, type, content, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        roomId:
+          type: integer
+          format: int64
+        senderUserId:
+          type: integer
+          format: int64
+          description: 可能省略（例如系统消息）。
+        type:
+          type: string
+          enum: [system, chat, transfer]
+        content:
+          type: string
+        transferId:
+          type: integer
+          format: int64
+          description: 可能省略。
+        createdAt:
+          type: string
+          format: date-time
+
+    MessageListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+
+    RecordSummary:
+      type: object
+      required: [recordId, roomNo, finalScore, settledAt, participant]
+      properties:
+        recordId:
+          type: integer
+          format: int64
+        roomNo:
+          type: string
+        finalScore:
+          type: integer
+          format: int64
+        settledAt:
+          type: string
+          format: date-time
+        participant:
+          type: integer
+
+    RecordPlayer:
+      type: object
+      required: [userId, nicknameSnapshot, finalScore]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        nicknameSnapshot:
+          type: string
+        finalScore:
+          type: integer
+          format: int64
+
+    RecordDetail:
+      type: object
+      required: [recordId, roomNo, settledAt, players]
+      properties:
+        recordId:
+          type: integer
+          format: int64
+        roomNo:
+          type: string
+        settledAt:
+          type: string
+          format: date-time
+        players:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordPlayer'
+
+    RecordListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordSummary'
+
+    WechatLoginInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+    UpdateMeInput:
+      type: object
+      required: [nickname]
+      properties:
+        nickname:
+          type: string
+          maxLength: 32
+        avatarUrl:
+          type: string
+
+    RedeemCodeInput:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+    CreateActivationCodeInput:
+      type: object
+      required: [targetRole]
+      properties:
+        targetRole:
+          type: string
+          enum: [normal, member, admin, super_admin]
+        maxUses:
+          type: integer
+          minimum: 1
+          description: 小于等于 0 时，服务端会按 1 处理。
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateActivationCodeResponse:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+
+    CreateRoomInput:
+      type: object
+      properties:
+        password:
+          type: string
+          description: 可为空。
+
+    JoinRoomInput:
+      type: object
+      properties:
+        password:
+          type: string
+          description: 可为空。
+
+    ChatToggleInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+
+    KickInput:
+      type: object
+      required: [targetUserId]
+      properties:
+        targetUserId:
+          type: integer
+          format: int64
+
+    RoomNicknameInput:
+      type: object
+      required: [roomNickname]
+      properties:
+        roomNickname:
+          type: string
+          maxLength: 32
+
+    TransferInput:
+      type: object
+      required: [toUserId, amount]
+      properties:
+        toUserId:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+          description: 不能为 0；负数会反向记分，但不翻转 fromUserId/toUserId。
+
+    TransferActionInput:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [rollback, reject]
+
+    SendMessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          maxLength: 1000
