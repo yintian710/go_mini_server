@@ -71,3 +71,14 @@ go run ./cmd/api
 - `GET /api/v1/records`
 - `GET /api/v1/records/{id}`
 - `GET /ws/rooms/{roomNo}`
+
+
+## 打包命令
+```bash
+cd /Users/yintian/my/goProject/go_mini_server
+  mkdir -p build
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -trimpath -ldflags="-s -w" \
+    -o build/go_mini_server ./cmd/api
+  file build/go_mini_server
+```
