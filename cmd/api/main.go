@@ -64,6 +64,7 @@ func main() {
 	api := handler.NewAPI(svc, jwtManager, wsHandler)
 
 	router := gin.Default()
+	router.Use(handler.AllowLocalhostCORS())
 	api.RegisterRoutes(router)
 	log.Printf("startup: http routes registered")
 
