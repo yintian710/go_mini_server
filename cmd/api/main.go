@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -20,6 +21,8 @@ import (
 )
 
 func main() {
+	log.SetOutput(os.Stdout)
+
 	bootStartedAt := time.Now()
 	log.Printf("startup: initializing application")
 
